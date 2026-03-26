@@ -1,8 +1,8 @@
-# AON AWS Sandbox - Master Orchestration Module
+# AWS AWS Sandbox - Master Orchestration Module
 
 ## Overview
 
-This is the master Terraform module that orchestrates the complete AON AWS Sandbox infrastructure. It brings together six specialized child modules to create a production-ready, cost-controlled, and security-focused AWS environment designed for comprehensive sandbox deployment and testing.
+This is the master Terraform module that orchestrates the complete  AWS Sandbox infrastructure. It brings together six specialized child modules to create a production-ready, cost-controlled, and security-focused AWS environment designed for comprehensive sandbox deployment and testing.
 
 **Repository**: `CEPS-AWS-Sandbox`
 
@@ -585,7 +585,7 @@ Alarm 3: Budget at 95% ($950)
 ```bash
 # Create custom dashboard
 aws cloudwatch put-dashboard \
-  --dashboard-name "AON-Sandbox" \
+  --dashboard-name "AWS-Sandbox" \
   --dashboard-body file://dashboard.json
 ```
 
@@ -1096,7 +1096,7 @@ watch -n 1 'aws ec2 describe-instances'
 
 ## License
 
-© 2024 AON. All rights reserved.
+© 2024 AWS. All rights reserved.
 
 ---
 

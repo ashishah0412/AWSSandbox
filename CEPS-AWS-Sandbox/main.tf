@@ -2,7 +2,7 @@
 # Master Terraform File - CEPS-AWS-Sandbox
 # ============================================================================
 # Purpose: Orchestrate all sandbox modules for complete AWS environment
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 
@@ -32,7 +32,7 @@ provider "aws" {
     tags = merge(
       var.common_tags,
       {
-        Project     = "AON-AWS-Sandbox"
+        Project     = "AWS-AWS-Sandbox"
         ManagedBy   = "Terraform-CEPS-AWS-Sandbox"
       }
     )

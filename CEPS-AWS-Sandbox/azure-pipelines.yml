@@ -413,7 +413,7 @@ stages:
               EnableSSL: true
               From: 'terraform-bot@aon.com'
               To: 'cloud-ops@aon.com'
-              Subject: '[AON Sandbox] Terraform Deployment Complete - Build $(Build.BuildId)'
+              Subject: '[AWS Sandbox] Terraform Deployment Complete - Build $(Build.BuildId)'
               Body: |
                 Terraform Deployment Successfully Completed!
 

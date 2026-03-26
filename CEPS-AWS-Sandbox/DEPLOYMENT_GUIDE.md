@@ -1,4 +1,4 @@
-# Deployment Guide - AON AWS Sandbox
+# Deployment Guide -  AWS Sandbox
 
 ## Table of Contents
 
@@ -406,7 +406,7 @@ echo "S3 Bucket: $BUCKET_NAME"
 ```bash
 # When approval is needed:
 # 1. Pipeline reaches "ApprovalGate" stage
-# 2. Review notification email at cloud-ops@aon.com
+# 2. Review notification email at cloud-ops@.com
 # 3. Go to: Pipelines → Run details
 # 4. Click: "Manual Validation"
 # 5. Click: "Approve" (or "Reject")
@@ -423,8 +423,8 @@ echo "S3 Bucket: $BUCKET_NAME"
 
 ```bash
 # You will receive email:
-# From: terraform-bot@aon.com
-# Subject: [AON Sandbox] Terraform Deployment Complete - Build #XXX
+# From: terraform-bot@.com
+# Subject: [ Sandbox] Terraform Deployment Complete - Build #XXX
 # 
 # Email contains:
 # - Build summary
@@ -814,7 +814,7 @@ aws logs tail /aws/network-firewall/Sandbox/flows --follow
 
 # Create CloudWatch Dashboard
 aws cloudwatch put-dashboard \
-  --dashboard-name "AON-Sandbox-Overview" \
+  --dashboard-name "AWS-Sandbox-Overview" \
   --dashboard-body file://dashboard.json
 ```
 
@@ -929,7 +929,7 @@ For issues or questions:
 2. **Review Outputs**: Check `terraform output` for deployment details
 3. **AWS Console**: Verify resources in AWS Management Console
 4. **Documentation**: Review module READMEs in `modules/` subdirectory
-5. **Contact Team**: Reach cloud-ops@aon.com for assistance
+5. **Contact Team**: Reach cloud-ops@AWS.com for assistance
 
 ---
 

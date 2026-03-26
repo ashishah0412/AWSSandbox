@@ -1,4 +1,4 @@
-# Troubleshooting Guide - AON AWS Sandbox
+# Troubleshooting Guide - AWS AWS Sandbox
 
 ## Quick Diagnostics
 
@@ -866,7 +866,7 @@ Level 1 - Self Service
 
 Level 2 - Team
 - Slack: #cloud-ops
-- Email: cloud-ops@aon.com
+- Email: cloud-ops@AWS.com
 - GitHub Issues: (repo)/issues
 
 Level 3 - Escalation
