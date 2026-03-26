@@ -1094,12 +1094,3 @@ watch -n 1 'aws ec2 describe-instances'
 | 1.1 | 2024-02-01 | Added Azure Pipelines support |
 | 2.0 | 2024-03-01 | Production-grade hardening |
 
-## License
-
-© 2024 AWS. All rights reserved.
-
----
-
-**Last Updated**: 2024-01-15
-**Maintained By**: CloudOps Team
-**Next Review**: 2024-06-15
