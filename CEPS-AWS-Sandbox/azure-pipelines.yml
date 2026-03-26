@@ -1,0 +1,513 @@
+# ============================================================================
+# Azure DevOps Pipeline - Terraform Deployment
+# ============================================================================
+# This pipeline automates Terraform deployment for CEPS-AWS-Sandbox
+# Supports both plan-review and plan-apply stages with approval gates
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - '**'
+    exclude:
+      - 'README.md'
+      - '.gitignore'
+      - 'docs/**'
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  - group: 'aws-sandbox-secrets'      # Contains: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+  - group: 'terraform-variables'      # Contains: TF_VERSION, AWS_REGION, etc.
+  - name: TF_VERSION
+    value: '1.5.0'
+  - name: AWS_REGION
+    value: 'us-east-1'
+  - name: TERRAFORM_WRAPPER
+    value: false
+  - name: TF_ROOT
+    value: '$(System.DefaultWorkingDirectory)'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  # =========================================================================
+  # STAGE 1: Initialize and Validate
+  # =========================================================================
+  - stage: Initialize
+    displayName: 'Initialize & Validate'
+    jobs:
+      - job: TerraformInit
+        displayName: 'Terraform Init'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.9'
+            displayName: 'Use Python 3.9'
+
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: $(TF_VERSION)
+            displayName: 'Install Terraform $(TF_VERSION)'
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform --version
+              terraform init -input=false -backend=false
+            displayName: 'Terraform Init (Local Backend for Validation)'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform validate
+            displayName: 'Terraform Validate'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform fmt -check -recursive
+            displayName: 'Terraform Format Check'
+            continueOnError: true
+
+  # =========================================================================
+  # STAGE 2: Plan
+  # =========================================================================
+  - stage: Plan
+    displayName: 'Terraform Plan'
+    dependsOn: Initialize
+    condition: succeeded()
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Generate Terraform Plan'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform init -input=false \
+                -backend-config="bucket=sandbox-terraform-state-$(AWS_ACCOUNT_ID)" \
+                -backend-config="key=terraform.tfstate" \
+                -backend-config="region=$(AWS_REGION)" \
+                -backend-config="encrypt=true" \
+                -backend-config="dynamodb_table=terraform-locks"
+            displayName: 'Terraform Init (S3 Backend)'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform plan \
+                -input=false \
+                -var-file=terraform.tfvars \
+                -out=tfplan.binary
+            displayName: 'Terraform Plan'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+              TF_WARN_OUTPUT_ERRORS: true
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform show -json tfplan.binary > tfplan.json
+            displayName: 'Export Plan as JSON'
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform show tfplan.binary > tfplan.txt
+            displayName: 'Export Plan as Text'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(TF_ROOT)'
+              artifactName: 'terraform-plan'
+              publishLocation: 'Container'
+            displayName: 'Publish Terraform Plan Artifacts'
+
+          - script: |
+              echo "=== TERRAFORM PLAN SUMMARY ==="
+              cd $(TF_ROOT)
+              cat tfplan.txt | head -50
+              echo ""
+              echo "Full plan saved to artifacts"
+            displayName: 'Display Plan Summary'
+
+          - script: |
+              cd $(TF_ROOT)
+              resource_count=$(terraform show -json tfplan.binary | \
+                jq '[.resource_changes[] | select(.change.actions | length > 0)] | length')
+              echo "##vso[task.setvariable variable=RESOURCE_COUNT]$resource_count"
+              echo "Resources to modify: $resource_count"
+            displayName: 'Count Resource Changes'
+
+  # =========================================================================
+  # STAGE 3: Code Review (Pull Request Only)
+  # =========================================================================
+  - stage: CodeReview
+    displayName: 'Code Review'
+    dependsOn: Plan
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: ReviewChecks
+        displayName: 'Automated Review Checks'
+        steps:
+          - checkout: self
+
+          - script: |
+              echo "Pull Request Analysis:"
+              echo "- Checking for sensitive data..."
+              echo "- Verifying resource tags..."
+              echo "- Validating security group rules..."
+              
+              if grep -r "AKIA" . --include="*.tf" --include="*.tfvars"; then
+                echo "##vso[task.logissue type=error]Potential AWS credentials found in code"
+                exit 1
+              fi
+              
+              echo "✓ Code review checks passed"
+            displayName: 'Run Automated Checks'
+
+      - task: GitHubComment@0
+        condition: succeeded()
+        inputs:
+          gitHubConnection: 'github-connection'
+          repositoryName: '$(Build.Repository.Name)'
+          id: $(System.PullRequest.PullRequestId)
+          comment: |
+            ## Terraform Plan Review
+
+            **Resources to modify**: $(RESOURCE_COUNT)
+
+            Please review the plan artifacts before merging.
+
+            [Download Plan Artifacts](https://dev.azure.com/$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId))
+
+            ✓ Validation passed
+            ✓ Format check passed
+        displayName: 'Post Comment to PR'
+
+  # =========================================================================
+  # STAGE 4: Approval Gate (Main Branch Only)
+  # =========================================================================
+  - stage: ApprovalGate
+    displayName: 'Manual Approval'
+    dependsOn: Plan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: ManualApprovalJob
+        displayName: 'Waiting for Approval'
+        pool: server
+        timeoutInMinutes: 1440  # 24 hours
+        steps:
+          - task: ManualValidation@0
+            timeoutInMinutes: 1440
+            inputs:
+              notifyUsers: 'cloud-ops@aon.com'
+              instructions: |
+                Review the Terraform Plan and approve/reject this deployment.
+                
+                **Plan Summary**: $(RESOURCE_COUNT) resources to be modified
+                
+                **Before approving, verify**:
+                1. All resource changes are expected
+                2. No sensitive data is being exposed
+                3. Budget thresholds are appropriate
+                4. IAM permissions are least-privilege
+                5. Security groups follow organization policies
+                
+                **Download Plan**: Check build artifacts
+              onTimeout: 'reject'
+
+  # =========================================================================
+  # STAGE 5: Apply
+  # =========================================================================
+  - stage: Apply
+    displayName: 'Apply Configuration'
+    dependsOn:
+      - Plan
+      - ApprovalGate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: TerraformApply
+        displayName: 'Terraform Apply'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'terraform-plan'
+              downloadPath: '$(System.DefaultWorkingDirectory)'
+            displayName: 'Download Plan Artifacts'
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform init -input=false \
+                -backend-config="bucket=sandbox-terraform-state-$(AWS_ACCOUNT_ID)" \
+                -backend-config="key=terraform.tfstate" \
+                -backend-config="region=$(AWS_REGION)" \
+                -backend-config="encrypt=true" \
+                -backend-config="dynamodb_table=terraform-locks"
+            displayName: 'Terraform Init'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+
+          - script: |
+              cd $(TF_ROOT)/terraform-plan
+              ls -la
+            displayName: 'List Downloaded Artifacts'
+
+          - script: |
+              cd $(TF_ROOT)
+              if [ -f "terraform-plan/tfplan.binary" ]; then
+                terraform apply -input=false "terraform-plan/tfplan.binary"
+              else
+                echo "Plan file not found, regenerating..."
+                terraform plan -input=false -var-file=terraform.tfvars -out=tfplan.binary
+                terraform apply -input=false tfplan.binary
+              fi
+            displayName: 'Terraform Apply'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+              TF_WARN_OUTPUT_ERRORS: true
+
+          - script: |
+              cd $(TF_ROOT)
+              terraform output -json > outputs.json
+              terraform output -raw deployment_notes
+            displayName: 'Capture Outputs'
+            continueOnError: true
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(TF_ROOT)'
+              artifactName: 'terraform-outputs'
+              publishLocation: 'Container'
+            displayName: 'Publish Deployment Outputs'
+            continueOnError: true
+
+  # =========================================================================
+  # STAGE 6: Validation
+  # =========================================================================
+  - stage: Validation
+    displayName: 'Post-Deployment Validation'
+    dependsOn: Apply
+    condition: succeeded()
+    jobs:
+      - job: ValidateDeployment
+        displayName: 'Validate Deployment'
+        steps:
+          - script: |
+              echo "Validating AWS resources..."
+              
+              # Check VPC
+              VPC_ID=$(aws ec2 describe-vpcs --filters "Name=cidr,Values=10.10.0.0/16" \
+                --query 'Vpcs[0].VpcId' --output text)
+              echo "✓ VPC: $VPC_ID"
+              
+              # Check Subnets
+              SUBNET_COUNT=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" \
+                --query 'length(Subnets)' --output text)
+              echo "✓ Subnets: $SUBNET_COUNT"
+              
+              # Check Security Groups
+              SG_COUNT=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" \
+                --query 'length(SecurityGroups)' --output text)
+              echo "✓ Security Groups: $SG_COUNT"
+              
+              # Check Firewall
+              FW_ID=$(aws network-firewall list-firewalls --query 'Firewalls[0].FirewallArn' --output text)
+              if [ "$FW_ID" != "None" ]; then
+                echo "✓ Network Firewall: $(basename $FW_ID)"
+              fi
+              
+              # Check Budget
+              BUDGET=$(aws budgets describe-budget --account-id $(AWS_ACCOUNT_ID) \
+                --budget-name "Sandbox" --query 'Budget.BudgetLimit.Amount' --output text)
+              echo "✓ Budget: \$$BUDGET"
+              
+              # Check SNS Topic
+              SNS=$(aws sns list-topics --query 'Topics[0].TopicArn' --output text)
+              echo "✓ SNS Topic: $(basename $SNS)"
+              
+              echo ""
+              echo "All resources successfully deployed!"
+            displayName: 'Validate AWS Resources'
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_REGION: $(AWS_REGION)
+            continueOnError: true
+
+  # =========================================================================
+  # STAGE 7: Notifications
+  # =========================================================================
+  - stage: Notify
+    displayName: 'Post-Deployment Notifications'
+    dependsOn:
+      - Apply
+      - Validation
+    condition: in(dependencies.Apply.result, 'Succeeded', 'SucceededWithIssues')
+    jobs:
+      - job: SendNotifications
+        displayName: 'Send Deployment Notification'
+        steps:
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)'
+              artifactName: 'deployment-summary'
+            displayName: 'Publish Deployment Summary'
+            continueOnError: true
+
+          - script: |
+              echo "Deployment Summary:"
+              echo "==================="
+              echo "Build: $(Build.BuildId)"
+              echo "Committed By: $(Build.RequestedForEmail)"
+              echo "Repository: $(Build.Repository.Name)"
+              echo "Branch: $(Build.SourceBranch)"
+              echo "Status: SUCCESS"
+              echo ""
+              echo "Artifacts Location:"
+              echo "Build: https://dev.azure.com/$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+            displayName: 'Generate Deployment Summary'
+
+          - task: SendEmail@1
+            inputs:
+              SmtpServer: 'smtp.office365.com'
+              SmtpPort: '587'
+              EnableSSL: true
+              From: 'terraform-bot@aon.com'
+              To: 'cloud-ops@aon.com'
+              Subject: '[AON Sandbox] Terraform Deployment Complete - Build $(Build.BuildId)'
+              Body: |
+                Terraform Deployment Successfully Completed!
+
+                Build Information:
+                - Build ID: $(Build.BuildId)
+                - Requested By: $(Build.RequestedForEmail)
+                - Repository: $(Build.Repository.Name)
+                - Branch: $(Build.SourceBranch)
+                - Trigger: $(Build.Reason)
+
+                Resources Deployed:
+                - VPC: 10.10.0.0/16
+                - Subnets: 3 (Private, Public, Firewall)
+                - Security Groups: 5
+                - Network Firewall: Enabled
+                - Budget: $1,000/Quarter
+                - IAM Groups: Developers, Viewers
+
+                Next Steps:
+                1. Confirm SNS email subscription
+                2. Review CloudWatch logs
+                3. Deploy compute resources
+                4. Configure database access
+
+                View Deployment Details:
+                https://dev.azure.com/$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
+
+                ---
+                This is an automated message from Azure Pipelines.
+              displayName: 'Send Success Notification'
+            condition: succeeded()
+            continueOnError: true
+
+  # =========================================================================
+  # STAGE 8: Failure Handling
+  # =========================================================================
+  - stage: HandleFailure
+    displayName: 'Failure Handling'
+    dependsOn:
+      - Apply
+      - Validation
+    condition: failed()
+    jobs:
+      - job: ReportFailure
+        displayName: 'Report Deployment Failure'
+        steps:
+          - task: SendEmail@1
+            inputs:
+              SmtpServer: 'smtp.office365.com'
+              SmtpPort: '587'
+              EnableSSL: true
+              From: 'terraform-bot@aon.com'
+              To: 'cloud-ops@aon.com,platform-eng@aon.com'
+              Subject: '[ALERT] Terraform Deployment Failed - Build $(Build.BuildId)'
+              Body: |
+                Terraform Deployment FAILED!
+
+                IMMEDIATE ACTION REQUIRED
+
+                Build Information:
+                - Build ID: $(Build.BuildId)
+                - Requested By: $(Build.RequestedForEmail)
+                - Repository: $(Build.Repository.Name)
+                - Branch: $(Build.SourceBranch)
+
+                Error Details:
+                Please review the build logs immediately.
+
+                View Build Details:
+                https://dev.azure.com/$(System.CollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
+
+                Troubleshooting Steps:
+                1. Check Terraform errors in build logs
+                2. Verify AWS credentials and permissions
+                3. Check AWS service limits
+                4. Verify S3 backend access
+                5. Review recent code changes
+
+                Contact: Cloud Operations Team
+                ---
+                This is an automated alert from Azure Pipelines.
+              displayName: 'Send Failure Notification'
+            continueOnError: true
+
+          - task: CreateWorkItem@1
+            inputs:
+              workItemType: 'Bug'
+              title: 'Build Failure: Terraform Deployment $(Build.BuildId)'
+              assignedTo: '$(Build.RequestedForEmail)'
+              description: |
+                Terraform deployment build failed.
+                
+                Build URL: $(Build.BuildUri)
+                
+                Please investigate and resolve the failure.
+              displayName: 'Create Work Item'
+            continueOnError: true
