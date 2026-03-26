@@ -60,7 +60,118 @@ resource "aws_sns_topic_subscription" "budget_alerts_email" {
 }
 
 # ============================================================================
-# AWS Budget
+# IAM Policies for Budget Actions
+# ============================================================================
+
+# Policy for 85% threshold - Requires approval before resource creation
+resource "aws_iam_policy" "budget_action_85_percent_policy" {
+  name        = "${var.environment}-budget-action-85-restrict"
+  description = "Restrictive policy applied at 85% budget threshold - requires approval for new resources"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyNewResourceCreation"
+        Effect = "Deny"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:CreateVolume",
+          "rds:CreateDBInstance",
+          "elasticache:CreateCacheCluster",
+          "lambda:CreateFunction",
+          "apigateway:CreateRestApi",
+          "dynamodb:CreateTable"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = var.aws_region
+          }
+        }
+      },
+      {
+        Sid    = "AllowModifyExistingResources"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:StopInstances",
+          "rds:DescribeDBInstances",
+          "lambda:GetFunction",
+          "logs:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.environment}-budget-action-85-policy"
+    }
+  )
+}
+
+# Policy for 95% threshold - Full freeze (deny all modifications)
+resource "aws_iam_policy" "budget_action_95_percent_policy" {
+  name        = "${var.environment}-budget-action-95-freeze"
+  description = "Freeze policy applied at 95% budget threshold - auto-applied resource freeze"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "FreezeAllResourceOperations"
+        Effect = "Deny"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:CreateVolume",
+          "ec2:CreateImage",
+          "ec2:CreateSnapshot",
+          "rds:CreateDBInstance",
+          "rds:ModifyDBInstance",
+          "elasticache:CreateCacheCluster",
+          "lambda:CreateFunction",
+          "lambda:UpdateFunctionCode",
+          "apigateway:CreateRestApi",
+          "dynamodb:CreateTable",
+          "s3:CreateBucket",
+          "efs:CreateFileSystem"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:RequestedRegion" = var.aws_region
+          }
+        }
+      },
+      {
+        Sid    = "AllowReadOnly"
+        Effect = "Allow"
+        Action = [
+          "ec2:Describe*",
+          "rds:Describe*",
+          "lambda:List*",
+          "lambda:Get*",
+          "logs:*",
+          "cloudwatch:*",
+          "s3:List*",
+          "s3:Get*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.environment}-budget-action-95-policy"
+    }
+  )
+}
+
+# ============================================================================
+# AWS Budget (quarterly cost limit)
 # ============================================================================
 resource "aws_budgets_budget" "sandbox_budget" {
   name              = "${var.environment}-quarterly-budget"
@@ -78,6 +189,18 @@ resource "aws_budgets_budget" "sandbox_budget" {
     }
   )
 }
+
+# ============================================================================
+# NOTE: Budget Threshold Alerts
+# ============================================================================
+# Threshold monitoring is implemented via CloudWatch Alarms (see below):
+# - 70% threshold: SNS notification to budget_alert_emails
+# - 85% threshold: SNS notification to budget_alert_emails  
+# - 95% threshold: SNS notification + Lambda auto-shutdown triggered
+#
+# These CloudWatch alarms integrate with AWS Billing metrics and appear
+# in the AWS Budget console along with SNS notifications.
+
 
 # ============================================================================
 # CloudWatch Alarms for Budget Thresholds

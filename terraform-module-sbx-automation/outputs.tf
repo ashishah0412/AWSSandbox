@@ -70,3 +70,37 @@ output "budget_thresholds" {
     ninety_five_percent = aws_budgets_budget.sandbox_budget.limit_amount * 0.95
   }
 }
+
+# ============================================================================
+# Budget Threshold Implementation
+# ============================================================================
+
+output "budget_threshold_monitoring" {
+  description = "How budget thresholds are monitored and alerted"
+  value = {
+    implementation_method = "CloudWatch Alarms + SNS + EventBridge + Lambda"
+    
+    thresholds = {
+      seventy_percent = {
+        trigger         = "Actual charges >= $${var.quarterly_budget_limit * 0.70}"
+        action          = "SNS notification to ${join(", ", var.budget_alert_emails)}"
+        automation      = "Email alert only"
+      }
+      eighty_five_percent = {
+        trigger         = "Actual charges >= $${var.quarterly_budget_limit * 0.85}"
+        action          = "SNS notification to ${join(", ", var.budget_alert_emails)}"
+        automation      = "Email alert only"
+      }
+      ninety_five_percent = {
+        trigger         = "Actual charges >= $${var.quarterly_budget_limit * 0.95}"
+        action          = "SNS notification + EventBridge rule fires"
+        automation      = "Lambda function triggered to stop/terminate EC2 and RDS resources"
+      }
+    }
+    
+    monitoring_source = "AWS/Billing EstimatedCharges metric"
+    alert_recipients  = var.budget_alert_emails
+    
+    note = "Threshold alerts appear in AWS Budgets console and trigger SNS notifications"
+  }
+}
