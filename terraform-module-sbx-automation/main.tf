@@ -2,7 +2,7 @@
 # AWS Cost Budget & Automation Module - terraform-module-sbx-automation
 # ============================================================================
 # Purpose: Cost budgets, alerts, automation, and resource controls
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 

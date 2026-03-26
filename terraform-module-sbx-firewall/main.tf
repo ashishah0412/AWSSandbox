@@ -2,7 +2,7 @@
 # AWS Network Firewall Module - terraform-module-sbx-firewall
 # ============================================================================
 # Purpose: Deploy AWS Network Firewall for traffic monitoring and inspection
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 

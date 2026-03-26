@@ -2,7 +2,7 @@
 # AWS IAM/RBAC Module - terraform-module-sbx-rbac
 # ============================================================================
 # Purpose: Create IAM roles, policies, and access controls for Sandbox
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 

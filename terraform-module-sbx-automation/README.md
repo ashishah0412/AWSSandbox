@@ -1,6 +1,6 @@
 # terraform-module-sbx-automation
 
-AWS Cost Budget & Automation Module for AON Sandbox Automation Project
+AWS Cost Budget & Automation Module for AWS Sandbox Automation Project
 
 ## Overview
 
@@ -58,7 +58,7 @@ module "automation" {
   budget_alert_emails    = ["ashishah0412@gmail.com"]
 
   common_tags = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
   }
@@ -391,8 +391,8 @@ terraform destroy
 
 ## License
 
-Internal Use Only - AON Sandbox Automation Project
+Internal Use Only - AWS Sandbox Automation Project
 
 ## Contributors
 
-AON Cloud Operations Team
+AWS Cloud Operations Team

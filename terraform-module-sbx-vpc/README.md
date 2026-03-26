@@ -1,6 +1,6 @@
 # terraform-module-sbx-vpc
 
-AWS VPC Module for AON Sandbox Automation Project
+AWS VPC Module for AWS Sandbox Automation Project
 
 ## Overview
 
@@ -40,7 +40,7 @@ module "vpc" {
   vpc_cidr_block = "10.10.0.0/16"
 
   common_tags = {
-    Project   = "AON-AWS-Sandbox"
+    Project   = "AWS-AWS-Sandbox"
     CostCenter = "Engineering"
     Owner     = "CloudOps"
   }
@@ -61,7 +61,7 @@ module "vpc" {
   vpc_flow_logs_retention_days = 30
 
   common_tags = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
     Environment = "Production"
@@ -238,8 +238,8 @@ For issues or questions:
 
 ## License
 
-Internal Use Only - AON Sandbox Automation Project
+Internal Use Only - AWS Sandbox Automation Project
 
 ## Contributors
 
-AON Cloud Operations Team
+AWS Cloud Operations Team

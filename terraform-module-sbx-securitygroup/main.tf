@@ -2,7 +2,7 @@
 # AWS Security Group Module - terraform-module-sbx-securitygroup
 # ============================================================================
 # Purpose: Create Security Groups for Sandbox resources
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 

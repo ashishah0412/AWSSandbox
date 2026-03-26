@@ -1,6 +1,6 @@
 # terraform-module-sbx-rbac
 
-AWS IAM/RBAC Module for AON Sandbox Automation Project
+AWS IAM/RBAC Module for AWS Sandbox Automation Project
 
 ## Overview
 
@@ -32,7 +32,7 @@ module "rbac" {
   environment = "Sandbox"
 
   common_tags = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
   }
@@ -132,8 +132,8 @@ terraform destroy
 
 ## License
 
-Internal Use Only - AON Sandbox Automation Project
+Internal Use Only - AWS Sandbox Automation Project
 
 ## Contributors
 
-AON Cloud Operations Team
+AWS Cloud Operations Team

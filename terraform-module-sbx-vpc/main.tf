@@ -2,7 +2,7 @@
 # AWS VPC Module - terraform-module-sbx-vpc
 # ============================================================================
 # Purpose: Create VPC infrastructure with VPC Endpoints (S3, DynamoDB)
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 

@@ -1,6 +1,6 @@
 # terraform-module-sbx-subnet
 
-AWS Subnet Module for AON Sandbox Automation Project
+AWS Subnet Module for AWS Sandbox Automation Project
 
 ## Overview
 
@@ -53,7 +53,7 @@ module "subnets" {
   firewall_ip_cidr       = "10.10.5.0/24"
 
   common_tags = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
   }
@@ -311,8 +311,8 @@ For issues or questions:
 
 ## License
 
-Internal Use Only - AON Sandbox Automation Project
+Internal Use Only - AWS Sandbox Automation Project
 
 ## Contributors
 
-AON Cloud Operations Team
+AWS Cloud Operations Team

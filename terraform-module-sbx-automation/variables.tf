@@ -107,7 +107,7 @@ variable "common_tags" {
   description = "Common tags to apply to all resources"
   type        = map(string)
   default = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
   }

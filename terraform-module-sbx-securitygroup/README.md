@@ -1,6 +1,6 @@
 # terraform-module-sbx-securitygroup
 
-AWS Security Group Module for AON Sandbox Automation Project
+AWS Security Group Module for AWS Sandbox Automation Project
 
 ## Overview
 
@@ -47,7 +47,7 @@ module "security_groups" {
   firewall_ip_cidr    = "10.10.5.0/24"
 
   common_tags = {
-    Project     = "AON-AWS-Sandbox"
+    Project     = "AWS-AWS-Sandbox"
     CostCenter  = "Engineering"
     Owner       = "CloudOps"
   }
@@ -346,8 +346,8 @@ terraform destroy
 
 ## License
 
-Internal Use Only - AON Sandbox Automation Project
+Internal Use Only - AWS Sandbox Automation Project
 
 ## Contributors
 
-AON Cloud Operations Team
+AWS Cloud Operations Team

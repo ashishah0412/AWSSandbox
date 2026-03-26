@@ -2,7 +2,7 @@
 # AWS Subnet Module - terraform-module-sbx-subnet
 # ============================================================================
 # Purpose: Create subnets (Private, Public, Firewall) with NACL rules
-# Author: AON Sandbox Team
+# Author: AWS Sandbox Team
 # Version: 1.0.0
 # ============================================================================
 
