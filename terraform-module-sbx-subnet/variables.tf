@@ -34,36 +34,83 @@ variable "vpc_id" {
   }
 }
 
-variable "private_subnet_cidr" {
-  description = "CIDR block for Private Subnet"
-  type        = string
-  default     = "10.10.1.0/24"
+# ============================================================================
+# Multi-AZ & Dynamic Subnet Configuration
+# ============================================================================
+
+variable "num_availability_zones" {
+  description = "Number of Availability Zones to use for multi-AZ deployment (1-4)"
+  type        = number
+  default     = 2
 
   validation {
-    condition     = can(cidrhost(var.private_subnet_cidr, 0))
-    error_message = "Private Subnet CIDR must be a valid CIDR range."
+    condition     = var.num_availability_zones >= 1 && var.num_availability_zones <= 4
+    error_message = "Number of AZs must be between 1 and 4"
   }
 }
 
-variable "public_subnet_cidr" {
-  description = "CIDR block for Public Subnet"
-  type        = string
-  default     = "10.10.2.0/24"
+variable "num_private_subnets" {
+  description = "Number of private subnets to create (one per availability zone)"
+  type        = number
+  default     = 2
 
   validation {
-    condition     = can(cidrhost(var.public_subnet_cidr, 0))
-    error_message = "Public Subnet CIDR must be a valid CIDR range."
+    condition     = var.num_private_subnets >= 1 && var.num_private_subnets <= 4
+    error_message = "Number of private subnets must be between 1 and 4"
+  }
+}
+
+variable "num_public_subnets" {
+  description = "Number of public subnets to create (one per availability zone)"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.num_public_subnets >= 1 && var.num_public_subnets <= 4
+    error_message = "Number of public subnets must be between 1 and 4"
+  }
+}
+
+variable "private_subnet_cidr_blocks" {
+  description = "List of CIDR blocks for private subnets (one per subnet in order)"
+  type        = list(string)
+  default     = ["10.10.1.0/24", "10.10.2.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidr_blocks) >= 1 && length(var.private_subnet_cidr_blocks) <= 4
+    error_message = "Must provide 1 to 4 private subnet CIDR blocks"
+  }
+
+  validation {
+    condition     = alltrue([for cidr in var.private_subnet_cidr_blocks : can(cidrhost(cidr, 0))])
+    error_message = "All private subnet CIDRs must be valid CIDR ranges"
+  }
+}
+
+variable "public_subnet_cidr_blocks" {
+  description = "List of CIDR blocks for public subnets (one per subnet in order)"
+  type        = list(string)
+  default     = ["10.10.11.0/24", "10.10.12.0/24"]
+
+  validation {
+    condition     = length(var.public_subnet_cidr_blocks) >= 1 && length(var.public_subnet_cidr_blocks) <= 4
+    error_message = "Must provide 1 to 4 public subnet CIDR blocks"
+  }
+
+  validation {
+    condition     = alltrue([for cidr in var.public_subnet_cidr_blocks : can(cidrhost(cidr, 0))])
+    error_message = "All public subnet CIDRs must be valid CIDR ranges"
   }
 }
 
 variable "firewall_subnet_cidr" {
-  description = "CIDR block for Firewall Subnet"
+  description = "CIDR block for Firewall Subnet (permanent, always 1 subnet)"
   type        = string
-  default     = "10.10.5.0/24"
+  default     = "10.10.21.0/24"
 
   validation {
     condition     = can(cidrhost(var.firewall_subnet_cidr, 0))
-    error_message = "Firewall Subnet CIDR must be a valid CIDR range."
+    error_message = "Firewall Subnet CIDR must be a valid CIDR range"
   }
 }
 

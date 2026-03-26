@@ -1,9 +1,9 @@
 # ============================================================================
 # AWS Subnet Module - terraform-module-sbx-subnet
 # ============================================================================
-# Purpose: Create subnets (Private, Public, Firewall) with NACL rules
+# Purpose: Create dynamic multi-AZ subnets (Private, Public, Firewall) with NACL rules
 # Author: AWS Sandbox Team
-# Version: 1.0.0
+# Version: 2.0.0 (Dynamic Multi-AZ)
 # ============================================================================
 
 terraform {
@@ -43,43 +43,49 @@ data "aws_availability_zones" "available" {
 }
 
 # ============================================================================
-# Private Subnet
+# Private Subnets - Dynamic (using count)
 # ============================================================================
-resource "aws_subnet" "private_subnet" {
-  vpc_id                          = var.vpc_id
-  cidr_block                      = var.private_subnet_cidr
-  availability_zone              = data.aws_availability_zones.available.names[0]
-  map_public_ip_on_launch         = false
+resource "aws_subnet" "private_subnets" {
+  count = var.num_private_subnets
+
+  vpc_id                  = var.vpc_id
+  cidr_block              = var.private_subnet_cidr_blocks[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
+  map_public_ip_on_launch = false
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-private-subnet"
+      Name = "${var.environment}-private-subnet-${count.index + 1}"
       Type = "Private"
+      AZ   = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
     }
   )
 }
 
 # ============================================================================
-# Public Subnet
+# Public Subnets - Dynamic (using count)
 # ============================================================================
-resource "aws_subnet" "public_subnet" {
+resource "aws_subnet" "public_subnets" {
+  count = var.num_public_subnets
+
   vpc_id                  = var.vpc_id
-  cidr_block              = var.public_subnet_cidr
-  availability_zone       = data.aws_availability_zones.available.names[1]
+  cidr_block              = var.public_subnet_cidr_blocks[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
   map_public_ip_on_launch = true
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-public-subnet"
+      Name = "${var.environment}-public-subnet-${count.index + 1}"
       Type = "Public"
+      AZ   = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
     }
   )
 }
 
 # ============================================================================
-# Firewall Subnet
+# Firewall Subnet - Static (permanent, always 1)
 # ============================================================================
 resource "aws_subnet" "firewall_subnet" {
   vpc_id                  = var.vpc_id
@@ -92,21 +98,24 @@ resource "aws_subnet" "firewall_subnet" {
     {
       Name = "${var.environment}-firewall-subnet"
       Type = "Firewall"
+      AZ   = data.aws_availability_zones.available.names[0]
     }
   )
 }
 
 # ============================================================================
-# Network ACL - SandboxPrivate
+# Network ACLs - Private (one per private subnet)
 # ============================================================================
-resource "aws_network_acl" "private_nacl" {
+resource "aws_network_acl" "private_nacls" {
+  count = var.num_private_subnets
+
   vpc_id     = var.vpc_id
-  subnet_ids = [aws_subnet.private_subnet.id]
+  subnet_ids = [aws_subnet.private_subnets[count.index].id]
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-private-nacl"
+      Name = "${var.environment}-private-nacl-${count.index + 1}"
     }
   )
 
@@ -149,11 +158,20 @@ resource "aws_network_acl" "private_nacl" {
   }
 
   egress {
-    protocol   = "tcp"
-    rule_no    = 200
+    protocol   = "udp"
+    rule_no    = 110
     action     = "allow"
-    cidr_block = var.specific_ip_cidr
-    from_port  = 80
+    cidr_block = "0.0.0.0/0"
+    from_port  = 53
+    to_port    = 53
+  }
+
+  egress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
     to_port    = 443
   }
 
@@ -168,16 +186,18 @@ resource "aws_network_acl" "private_nacl" {
 }
 
 # ============================================================================
-# Network ACL - SandboxPublic
+# Network ACLs - Public (one per public subnet)
 # ============================================================================
-resource "aws_network_acl" "public_nacl" {
+resource "aws_network_acl" "public_nacls" {
+  count = var.num_public_subnets
+
   vpc_id     = var.vpc_id
-  subnet_ids = [aws_subnet.public_subnet.id]
+  subnet_ids = [aws_subnet.public_subnets[count.index].id]
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-public-nacl"
+      Name = "${var.environment}-public-nacl-${count.index + 1}"
     }
   )
 
@@ -239,7 +259,7 @@ resource "aws_network_acl" "public_nacl" {
 }
 
 # ============================================================================
-# Network ACL - SandboxFirewall
+# Network ACL - Firewall (static)
 # ============================================================================
 resource "aws_network_acl" "firewall_nacl" {
   vpc_id     = var.vpc_id
@@ -310,29 +330,56 @@ resource "aws_network_acl" "firewall_nacl" {
 }
 
 # ============================================================================
-# Route Tables
+# Route Tables - Private (one per private subnet)
 # ============================================================================
-resource "aws_route_table" "private_route_table" {
+resource "aws_route_table" "private_route_tables" {
+  count = var.num_private_subnets
+
   vpc_id = var.vpc_id
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-private-rt"
+      Name = "${var.environment}-private-rt-${count.index + 1}"
+      Type = "Private"
     }
   )
 }
 
-resource "aws_route_table" "public_route_table" {
+resource "aws_route_table_association" "private_associations" {
+  count = var.num_private_subnets
+
+  subnet_id      = aws_subnet.private_subnets[count.index].id
+  route_table_id = aws_route_table.private_route_tables[count.index].id
+}
+
+# ============================================================================
+# Route Tables - Public (one per public subnet)
+# ============================================================================
+resource "aws_route_table" "public_route_tables" {
+  count = var.num_public_subnets
+
   vpc_id = var.vpc_id
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-public-rt"
+      Name = "${var.environment}-public-rt-${count.index + 1}"
+      Type = "Public"
     }
   )
 }
+
+resource "aws_route_table_association" "public_associations" {
+  count = var.num_public_subnets
+
+  subnet_id      = aws_subnet.public_subnets[count.index].id
+  route_table_id = aws_route_table.public_route_tables[count.index].id
+}
+
+# ============================================================================
+# Route Table - Firewall (static)
+# ============================================================================
 
 resource "aws_route_table" "firewall_route_table" {
   vpc_id = var.vpc_id
@@ -341,24 +388,12 @@ resource "aws_route_table" "firewall_route_table" {
     var.common_tags,
     {
       Name = "${var.environment}-firewall-rt"
+      Type = "Firewall"
     }
   )
 }
 
-# ============================================================================
-# Route Table Associations
-# ============================================================================
-resource "aws_route_table_association" "private_subnet_association" {
-  subnet_id      = aws_subnet.private_subnet.id
-  route_table_id = aws_route_table.private_route_table.id
-}
-
-resource "aws_route_table_association" "public_subnet_association" {
-  subnet_id      = aws_subnet.public_subnet.id
-  route_table_id = aws_route_table.public_route_table.id
-}
-
-resource "aws_route_table_association" "firewall_subnet_association" {
+resource "aws_route_table_association" "firewall_association" {
   subnet_id      = aws_subnet.firewall_subnet.id
   route_table_id = aws_route_table.firewall_route_table.id
 }

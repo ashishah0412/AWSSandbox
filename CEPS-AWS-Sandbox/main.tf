@@ -62,15 +62,19 @@ module "vpc" {
 module "subnets" {
   source = "../terraform-module-sbx-subnet"
 
-  aws_region       = var.aws_region
-  environment      = var.environment
-  vpc_id           = module.vpc.vpc_id
+  aws_region  = var.aws_region
+  environment = var.environment
+  vpc_id      = module.vpc.vpc_id
 
-  private_subnet_cidr   = var.private_subnet_cidr
-  public_subnet_cidr    = var.public_subnet_cidr
-  firewall_subnet_cidr  = var.firewall_subnet_cidr
-  specific_ip_cidr      = var.specific_ip_cidr
-  firewall_ip_cidr      = var.firewall_ip_cidr
+  # Multi-AZ & Dynamic Subnet Configuration
+  num_availability_zones     = var.num_availability_zones
+  num_private_subnets        = var.num_private_subnets
+  num_public_subnets         = var.num_public_subnets
+  private_subnet_cidr_blocks = var.private_subnet_cidr_blocks
+  public_subnet_cidr_blocks  = var.public_subnet_cidr_blocks
+  firewall_subnet_cidr       = var.firewall_subnet_cidr
+  specific_ip_cidr           = var.specific_ip_cidr
+  firewall_ip_cidr           = var.firewall_ip_cidr
 
   common_tags = var.common_tags
 }
@@ -90,7 +94,9 @@ resource "aws_internet_gateway" "main" {
 }
 
 resource "aws_route" "public_internet_route" {
-  route_table_id         = module.subnets.public_route_table_id
+  count = length(module.subnets.public_route_table_ids)
+  
+  route_table_id         = module.subnets.public_route_table_ids[count.index]
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
 }
@@ -98,9 +104,9 @@ resource "aws_route" "public_internet_route" {
 # Helper module-like setup for route tables mentioned in subnets (this is simple local resource)
 locals {
   subnets_routing = {
-    private_route_table_id  = module.subnets.private_route_table_id
-    public_route_table_id   = module.subnets.public_route_table_id
-    firewall_route_table_id = module.subnets.firewall_route_table_id
+    private_route_table_ids  = module.subnets.private_route_table_ids
+    public_route_table_ids   = module.subnets.public_route_table_ids
+    firewall_route_table_id  = module.subnets.firewall_route_table_id
   }
 }
 
@@ -118,7 +124,7 @@ module "security_groups" {
   vpc_id          = module.vpc.vpc_id
   vpc_cidr_block  = var.vpc_cidr_block
 
-  private_subnet_cidr = var.private_subnet_cidr
+  private_subnet_cidr = var.private_subnet_cidr_blocks
   specific_ip_cidr    = var.specific_ip_cidr
   firewall_ip_cidr    = var.firewall_ip_cidr
 

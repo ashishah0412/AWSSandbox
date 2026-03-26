@@ -281,6 +281,127 @@ Supported regions:
 - eu-west-1, eu-central-1
 - ap-southeast-1, ap-northeast-1
 
+### Multi-AZ & Dynamic Subnet Configuration
+
+**NEW FEATURE**: The subnet module now supports dynamic multi-AZ deployments with configurable subnet counts and CIDR blocks. This enables you to:
+
+- Deploy to **1-4 Availability Zones** for fault tolerance
+- Create **1-4 private subnets** independently
+- Create **1-4 public subnets** independently
+- Automatically distribute subnets across AZs using round-robin
+- Scale infrastructure without code changes
+
+#### Default Configuration (2 AZs)
+
+```hcl
+# terraform.tfvars
+num_availability_zones = 2      # Deploy across 2 AZs
+
+# Private subnets (2 total, distributed across AZs)
+num_private_subnets    = 2
+private_subnet_cidr_blocks = [
+  "10.10.1.0/24",               # Private AZ-1
+  "10.10.2.0/24"                # Private AZ-2
+]
+
+# Public subnets (2 total, distributed across AZs)
+num_public_subnets     = 2
+public_subnet_cidr_blocks = [
+  "10.10.11.0/24",              # Public AZ-1
+  "10.10.12.0/24"               # Public AZ-2
+]
+
+# Firewall subnet (always 1, static)
+firewall_subnet_cidr = "10.10.21.0/24"
+```
+
+#### High-Availability Configuration (3 AZs, 3 subnets each)
+
+```hcl
+# terraform.tfvars
+num_availability_zones = 3
+
+num_private_subnets    = 3
+private_subnet_cidr_blocks = [
+  "10.10.1.0/24",
+  "10.10.2.0/24",
+  "10.10.3.0/24"
+]
+
+num_public_subnets     = 3
+public_subnet_cidr_blocks = [
+  "10.10.11.0/24",
+  "10.10.12.0/24",
+  "10.10.13.0/24"
+]
+```
+
+#### Single-AZ Configuration (Development/Testing)
+
+```hcl
+# terraform.tfvars
+num_availability_zones = 1
+
+num_private_subnets    = 1
+private_subnet_cidr_blocks = [
+  "10.10.1.0/24"
+]
+
+num_public_subnets     = 1
+public_subnet_cidr_blocks = [
+  "10.10.11.0/24"
+]
+```
+
+#### Multi-AZ Distribution Logic
+
+Subnets are automatically distributed across availability zones using a round-robin algorithm:
+
+```
+Availability Zones Available: us-east-1a, us-east-1b, us-east-1c
+
+Configuration: 3 AZs, 4 Private Subnets
+Result:
+  Subnet-1 (10.10.1.0/24)   → us-east-1a
+  Subnet-2 (10.10.2.0/24)   → us-east-1b
+  Subnet-3 (10.10.3.0/24)   → us-east-1c
+  Subnet-4 (10.10.4.0/24)   → us-east-1a (wraps around)
+```
+
+**Formula**: `availability_zone = data.aws_availability_zones.available.names[subnet_index % num_availability_zones]`
+
+#### Terraform Outputs
+
+After deployment, retrieve subnet information:
+
+```bash
+# List all private subnet IDs
+terraform output private_subnet_ids
+
+# List all public subnet IDs
+terraform output public_subnet_ids
+
+# View subnets organized by AZ
+terraform output subnets_by_az
+
+# Get deployment summary
+terraform output subnet_count_summary
+```
+
+Example output:
+```json
+{
+  "private_subnet_ids": ["subnet-111111", "subnet-222222"],
+  "public_subnet_ids": ["subnet-333333", "subnet-444444"],
+  "subnet_count_summary": {
+    "num_availability_zones": 2,
+    "num_private_subnets": 2,
+    "num_public_subnets": 2,
+    "total_subnets": 5
+  }
+}
+```
+
 ### Budget Configuration
 
 ```hcl

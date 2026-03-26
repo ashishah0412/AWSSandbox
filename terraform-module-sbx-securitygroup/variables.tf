@@ -46,13 +46,13 @@ variable "vpc_cidr_block" {
 }
 
 variable "private_subnet_cidr" {
-  description = "CIDR block for Private Subnet"
-  type        = string
-  default     = "10.10.1.0/24"
+  description = "CIDR blocks for Private Subnets (list format for multi-AZ support)"
+  type        = list(string)
+  default     = ["10.10.1.0/24", "10.10.2.0/24"]
 
   validation {
-    condition     = can(cidrhost(var.private_subnet_cidr, 0))
-    error_message = "Private Subnet CIDR must be a valid CIDR range."
+    condition     = alltrue([for cidr in var.private_subnet_cidr : can(cidrhost(cidr, 0))])
+    error_message = "Each private subnet CIDR block must be a valid CIDR range."
   }
 }
 

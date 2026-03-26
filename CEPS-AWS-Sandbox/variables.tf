@@ -43,25 +43,76 @@ variable "vpc_flow_logs_retention_days" {
 }
 
 # ============================================================================
-# Subnet Module Variables
+# Subnet Module Variables - Multi-AZ & Dynamic Configuration
 # ============================================================================
 
-variable "private_subnet_cidr" {
-  description = "Private Subnet CIDR"
-  type        = string
-  default     = "10.10.1.0/24"
+variable "num_availability_zones" {
+  description = "Number of Availability Zones to use for multi-AZ deployment"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.num_availability_zones >= 1 && var.num_availability_zones <= 4
+    error_message = "Number of AZs must be between 1 and 4"
+  }
 }
 
-variable "public_subnet_cidr" {
-  description = "Public Subnet CIDR"
-  type        = string
-  default     = "10.10.2.0/24"
+variable "num_private_subnets" {
+  description = "Number of private subnets to create (one per AZ)"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.num_private_subnets >= 1 && var.num_private_subnets <= 4
+    error_message = "Number of private subnets must be between 1 and 4"
+  }
+}
+
+variable "num_public_subnets" {
+  description = "Number of public subnets to create (one per AZ)"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.num_public_subnets >= 1 && var.num_public_subnets <= 4
+    error_message = "Number of public subnets must be between 1 and 4"
+  }
+}
+
+variable "private_subnet_cidr_blocks" {
+  description = <<EOF
+List of CIDR blocks for private subnets (one per subnet in order).
+Example for 2 subnets: ["10.10.1.0/24", "10.10.2.0/24"]
+Example for 3 subnets: ["10.10.1.0/24", "10.10.2.0/24", "10.10.3.0/24"]
+EOF
+  type        = list(string)
+  default     = ["10.10.1.0/24", "10.10.2.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidr_blocks) >= 1 && length(var.private_subnet_cidr_blocks) <= 4
+    error_message = "Must provide 1 to 4 private subnet CIDR blocks"
+  }
+}
+
+variable "public_subnet_cidr_blocks" {
+  description = <<EOF
+List of CIDR blocks for public subnets (one per subnet in order).
+Example for 2 subnets: ["10.10.11.0/24", "10.10.12.0/24"]
+Example for 3 subnets: ["10.10.11.0/24", "10.10.12.0/24", "10.10.13.0/24"]
+EOF
+  type        = list(string)
+  default     = ["10.10.11.0/24", "10.10.12.0/24"]
+
+  validation {
+    condition     = length(var.public_subnet_cidr_blocks) >= 1 && length(var.public_subnet_cidr_blocks) <= 4
+    error_message = "Must provide 1 to 4 public subnet CIDR blocks"
+  }
 }
 
 variable "firewall_subnet_cidr" {
-  description = "Firewall Subnet CIDR"
+  description = "Firewall Subnet CIDR (permanent, one subnet always created)"
   type        = string
-  default     = "10.10.5.0/24"
+  default     = "10.10.21.0/24"
 }
 
 variable "specific_ip_cidr" {
@@ -73,7 +124,7 @@ variable "specific_ip_cidr" {
 variable "firewall_ip_cidr" {
   description = "Firewall Device IP CIDR"
   type        = string
-  default     = "10.10.5.0/24"
+  default     = "10.10.21.0/24"
 }
 
 # ============================================================================

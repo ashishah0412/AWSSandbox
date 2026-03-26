@@ -281,20 +281,20 @@ resource "aws_security_group" "database_sg" {
 
   # Allow MySQL/Aurora from Private subnet
   ingress {
-    description = "Allow MySQL from Private subnet"
+    description = "Allow MySQL from Private subnets"
     from_port   = 3306
     to_port     = 3306
     protocol    = "tcp"
-    cidr_blocks = [var.private_subnet_cidr]
+    cidr_blocks = var.private_subnet_cidr
   }
 
   # Allow PostgreSQL from Private subnet
   ingress {
-    description = "Allow PostgreSQL from Private subnet"
+    description = "Allow PostgreSQL from Private subnets"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = [var.private_subnet_cidr]
+    cidr_blocks = var.private_subnet_cidr
   }
 
   # Allow RDS listener

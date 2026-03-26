@@ -24,16 +24,16 @@ output "vpc_arn" {
 }
 
 # ============================================================================
-# Outputs - Subnets Information
+# Outputs - Subnets Information (Dynamic, Multi-AZ)
 # ============================================================================
-output "private_subnet_id" {
-  description = "Private Subnet ID"
-  value       = module.subnets.private_subnet_id
+output "private_subnet_ids" {
+  description = "List of Private Subnet IDs"
+  value       = module.subnets.private_subnet_ids
 }
 
-output "public_subnet_id" {
-  description = "Public Subnet ID"
-  value       = module.subnets.public_subnet_id
+output "public_subnet_ids" {
+  description = "List of Public Subnet IDs"
+  value       = module.subnets.public_subnet_ids
 }
 
 output "firewall_subnet_id" {
@@ -42,12 +42,22 @@ output "firewall_subnet_id" {
 }
 
 output "subnet_nacl_ids" {
-  description = "Network ACL IDs for all subnets"
+  description = "Network ACL IDs for all subnets (dynamic)"
   value = {
-    private_nacl_id   = module.subnets.private_nacl_id
-    public_nacl_id    = module.subnets.public_nacl_id
-    firewall_nacl_id  = module.subnets.firewall_nacl_id
+    private_nacl_ids   = module.subnets.private_nacl_ids
+    public_nacl_ids    = module.subnets.public_nacl_ids
+    firewall_nacl_id   = module.subnets.firewall_nacl_id
   }
+}
+
+output "subnets_by_az" {
+  description = "Subnets grouped by Availability Zone with details"
+  value       = module.subnets.subnets_by_az
+}
+
+output "subnet_count_summary" {
+  description = "Summary of created subnets"
+  value       = module.subnets.subnet_count_summary
 }
 
 # ============================================================================
@@ -145,9 +155,9 @@ output "sandbox_deployment_summary" {
     region      = var.aws_region
     vpc_id      = module.vpc.vpc_id
     subnets = {
-      private   = module.subnets.private_subnet_id
-      public    = module.subnets.public_subnet_id
-      firewall  = module.subnets.firewall_subnet_id
+      private_ids  = module.subnets.private_subnet_ids
+      public_ids   = module.subnets.public_subnet_ids
+      firewall_id  = module.subnets.firewall_subnet_id
     }
     #firewall_id      = module.firewall.firewall_id
     budget_limit_usd = module.automation.budget_limit_amount

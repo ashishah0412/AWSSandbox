@@ -1,39 +1,62 @@
 # ============================================================================
 # Outputs - terraform-module-sbx-subnet
+# Multi-AZ & Dynamic Subnets (v2.0)
 # ============================================================================
 
-output "private_subnet_id" {
-  description = "Private Subnet ID"
-  value       = aws_subnet.private_subnet.id
+# ============================================================================
+# Private Subnet Outputs
+# ============================================================================
+
+output "private_subnet_ids" {
+  description = "List of Private Subnet IDs"
+  value       = aws_subnet.private_subnets[*].id
 }
 
-output "private_subnet_arn" {
-  description = "Private Subnet ARN"
-  value       = aws_subnet.private_subnet.arn
+output "private_subnet_arns" {
+  description = "List of Private Subnet ARNs"
+  value       = aws_subnet.private_subnets[*].arn
 }
 
-output "private_subnet_cidr" {
-  description = "Private Subnet CIDR block"
-  value       = aws_subnet.private_subnet.cidr_block
+output "private_subnet_cidrs" {
+  description = "List of Private Subnet CIDR blocks"
+  value       = aws_subnet.private_subnets[*].cidr_block
 }
 
-output "public_subnet_id" {
-  description = "Public Subnet ID"
-  value       = aws_subnet.public_subnet.id
+output "private_subnet_azs" {
+  description = "List of Private Subnet Availability Zones"
+  value       = aws_subnet.private_subnets[*].availability_zone
 }
 
-output "public_subnet_arn" {
-  description = "Public Subnet ARN"
-  value       = aws_subnet.public_subnet.arn
+# ============================================================================
+# Public Subnet Outputs
+# ============================================================================
+
+output "public_subnet_ids" {
+  description = "List of Public Subnet IDs"
+  value       = aws_subnet.public_subnets[*].id
 }
 
-output "public_subnet_cidr" {
-  description = "Public Subnet CIDR block"
-  value       = aws_subnet.public_subnet.cidr_block
+output "public_subnet_arns" {
+  description = "List of Public Subnet ARNs"
+  value       = aws_subnet.public_subnets[*].arn
 }
+
+output "public_subnet_cidrs" {
+  description = "List of Public Subnet CIDR blocks"
+  value       = aws_subnet.public_subnets[*].cidr_block
+}
+
+output "public_subnet_azs" {
+  description = "List of Public Subnet Availability Zones"
+  value       = aws_subnet.public_subnets[*].availability_zone
+}
+
+# ============================================================================
+# Firewall Subnet Outputs (Static - Always 1)
+# ============================================================================
 
 output "firewall_subnet_id" {
-  description = "Firewall Subnet ID"
+  description = "Firewall Subnet ID (static, always 1)"
   value       = aws_subnet.firewall_subnet.id
 }
 
@@ -47,50 +70,104 @@ output "firewall_subnet_cidr" {
   value       = aws_subnet.firewall_subnet.cidr_block
 }
 
-output "private_nacl_id" {
-  description = "Private Subnet Network ACL ID"
-  value       = aws_network_acl.private_nacl.id
+output "firewall_subnet_az" {
+  description = "Firewall Subnet Availability Zone"
+  value       = aws_subnet.firewall_subnet.availability_zone
 }
 
-output "public_nacl_id" {
-  description = "Public Subnet Network ACL ID"
-  value       = aws_network_acl.public_nacl.id
+# ============================================================================
+# Network ACL Outputs
+# ============================================================================
+
+output "private_nacl_ids" {
+  description = "List of Private Subnet Network ACL IDs"
+  value       = aws_network_acl.private_nacls[*].id
+}
+
+output "public_nacl_ids" {
+  description = "List of Public Subnet Network ACL IDs"
+  value       = aws_network_acl.public_nacls[*].id
 }
 
 output "firewall_nacl_id" {
-  description = "Firewall Subnet Network ACL ID"
+  description = "Firewall Subnet Network ACL ID (static)"
   value       = aws_network_acl.firewall_nacl.id
 }
 
-output "private_route_table_id" {
-  description = "Private Route Table ID"
-  value       = aws_route_table.private_route_table.id
+# ============================================================================
+# Route Table Outputs
+# ============================================================================
+
+output "private_route_table_ids" {
+  description = "List of Private Route Table IDs"
+  value       = aws_route_table.private_route_tables[*].id
 }
 
-output "public_route_table_id" {
-  description = "Public Route Table ID"
-  value       = aws_route_table.public_route_table.id
+output "public_route_table_ids" {
+  description = "List of Public Route Table IDs"
+  value       = aws_route_table.public_route_tables[*].id
 }
 
 output "firewall_route_table_id" {
-  description = "Firewall Route Table ID"
+  description = "Firewall Route Table ID (static)"
   value       = aws_route_table.firewall_route_table.id
 }
 
-output "all_subnet_ids" {
-  description = "All Subnet IDs (Private, Public, Firewall)"
+# ============================================================================
+# Summary & Composite Outputs
+# ============================================================================
+
+output "subnets_by_az" {
+  description = "Subnets organized by Availability Zone"
   value = {
-    private_subnet_id   = aws_subnet.private_subnet.id
-    public_subnet_id    = aws_subnet.public_subnet.id
+    for az in data.aws_availability_zones.available.names :
+    az => {
+      private_subnets = [
+        for i, subnet in aws_subnet.private_subnets :
+        {
+          subnet_id  = subnet.id
+          cidr_block = subnet.cidr_block
+        }
+        if subnet.availability_zone == az
+      ]
+      public_subnets = [
+        for i, subnet in aws_subnet.public_subnets :
+        {
+          subnet_id  = subnet.id
+          cidr_block = subnet.cidr_block
+        }
+        if subnet.availability_zone == az
+      ]
+    }
+  }
+}
+
+output "subnet_count_summary" {
+  description = "Summary of subnet counts and configuration"
+  value = {
+    num_availability_zones = var.num_availability_zones
+    num_private_subnets    = var.num_private_subnets
+    num_public_subnets     = var.num_public_subnets
+    total_subnets          = (var.num_private_subnets + var.num_public_subnets + 1) # +1 for firewall
+    private_subnets_count  = length(aws_subnet.private_subnets)
+    public_subnets_count   = length(aws_subnet.public_subnets)
+  }
+}
+
+output "all_subnet_ids" {
+  description = "All Subnet IDs organized by type"
+  value = {
+    private_subnet_ids  = aws_subnet.private_subnets[*].id
+    public_subnet_ids   = aws_subnet.public_subnets[*].id
     firewall_subnet_id  = aws_subnet.firewall_subnet.id
   }
 }
 
 output "all_route_table_ids" {
-  description = "All Route Table IDs"
+  description = "All Route Table IDs organized by type"
   value = {
-    private_rt_id   = aws_route_table.private_route_table.id
-    public_rt_id    = aws_route_table.public_route_table.id
-    firewall_rt_id  = aws_route_table.firewall_route_table.id
+    private_route_table_ids = aws_route_table.private_route_tables[*].id
+    public_route_table_ids  = aws_route_table.public_route_tables[*].id
+    firewall_route_table_id = aws_route_table.firewall_route_table.id
   }
 }
