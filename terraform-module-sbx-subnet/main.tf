@@ -38,8 +38,27 @@ data "aws_vpc" "sandbox_vpc" {
   id = var.vpc_id
 }
 
-data "aws_availability_zones" "available" {
-  state = "available"
+# ============================================================================
+# Locals - Availability Zones Configuration
+# ============================================================================
+# Regional AZ defaults (for when user doesn't specify availability_zones)
+# This avoids requiring ec2:DescribeAvailabilityZones IAM permission
+locals {
+  azs_by_region = {
+    "us-east-1"      = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
+    "us-east-2"      = ["us-east-2a", "us-east-2b", "us-east-2c"]
+    "us-west-1"      = ["us-west-1a", "us-west-1b", "us-west-1c"]
+    "us-west-2"      = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
+    "eu-west-1"      = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+    "eu-central-1"   = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
+    "ap-southeast-1" = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
+    "ap-northeast-1" = ["ap-northeast-1a", "ap-northeast-1b", "ap-northeast-1c", "ap-northeast-1d"]
+    "ca-central-1"   = ["ca-central-1a", "ca-central-1b", "ca-central-1d"]
+    "ap-south-1"     = ["ap-south-1a", "ap-south-1b", "ap-south-1c"]
+  }
+  
+  # Use provided AZs if specified, otherwise use regional defaults
+  availability_zones = length(var.availability_zones) > 0 ? var.availability_zones : try(local.azs_by_region[var.aws_region], ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"])
 }
 
 # ============================================================================
@@ -50,7 +69,7 @@ resource "aws_subnet" "private_subnets" {
 
   vpc_id                  = var.vpc_id
   cidr_block              = var.private_subnet_cidr_blocks[count.index]
-  availability_zone       = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
+  availability_zone       = local.availability_zones[count.index % var.num_availability_zones]
   map_public_ip_on_launch = false
 
   tags = merge(
@@ -58,7 +77,7 @@ resource "aws_subnet" "private_subnets" {
     {
       Name = "${var.environment}-private-subnet-${count.index + 1}"
       Type = "Private"
-      AZ   = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
+      AZ   = local.availability_zones[count.index % var.num_availability_zones]
     }
   )
 }
@@ -71,7 +90,7 @@ resource "aws_subnet" "public_subnets" {
 
   vpc_id                  = var.vpc_id
   cidr_block              = var.public_subnet_cidr_blocks[count.index]
-  availability_zone       = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
+  availability_zone       = local.availability_zones[count.index % var.num_availability_zones]
   map_public_ip_on_launch = true
 
   tags = merge(
@@ -79,7 +98,7 @@ resource "aws_subnet" "public_subnets" {
     {
       Name = "${var.environment}-public-subnet-${count.index + 1}"
       Type = "Public"
-      AZ   = data.aws_availability_zones.available.names[count.index % var.num_availability_zones]
+      AZ   = local.availability_zones[count.index % var.num_availability_zones]
     }
   )
 }
@@ -90,7 +109,7 @@ resource "aws_subnet" "public_subnets" {
 resource "aws_subnet" "firewall_subnet" {
   vpc_id                  = var.vpc_id
   cidr_block              = var.firewall_subnet_cidr
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  availability_zone       = local.availability_zones[0]
   map_public_ip_on_launch = false
 
   tags = merge(
@@ -98,7 +117,7 @@ resource "aws_subnet" "firewall_subnet" {
     {
       Name = "${var.environment}-firewall-subnet"
       Type = "Firewall"
-      AZ   = data.aws_availability_zones.available.names[0]
+      AZ   = local.availability_zones[0]
     }
   )
 }

@@ -119,27 +119,35 @@ output "firewall_route_table_id" {
 
 output "subnets_by_az" {
   description = "Subnets organized by Availability Zone"
-  value = {
-    for az in data.aws_availability_zones.available.names :
-    az => {
-      private_subnets = [
-        for i, subnet in aws_subnet.private_subnets :
-        {
-          subnet_id  = subnet.id
-          cidr_block = subnet.cidr_block
-        }
-        if subnet.availability_zone == az
-      ]
-      public_subnets = [
-        for i, subnet in aws_subnet.public_subnets :
-        {
-          subnet_id  = subnet.id
-          cidr_block = subnet.cidr_block
-        }
-        if subnet.availability_zone == az
-      ]
+  value = merge(
+    # Private subnets by AZ
+    {
+      for subnet in aws_subnet.private_subnets : subnet.availability_zone => {
+        type    = "private"
+        id      = subnet.id
+        cidr    = subnet.cidr_block
+        az      = subnet.availability_zone
+      }...
+    },
+    # Public subnets by AZ
+    {
+      for subnet in aws_subnet.public_subnets : subnet.availability_zone => {
+        type    = "public"
+        id      = subnet.id
+        cidr    = subnet.cidr_block
+        az      = subnet.availability_zone
+      }...
+    },
+    # Firewall subnet
+    {
+      (aws_subnet.firewall_subnet.availability_zone) = {
+        type    = "firewall"
+        id      = aws_subnet.firewall_subnet.id
+        cidr    = aws_subnet.firewall_subnet.cidr_block
+        az      = aws_subnet.firewall_subnet.availability_zone
+      }
     }
-  }
+  )
 }
 
 output "subnet_count_summary" {

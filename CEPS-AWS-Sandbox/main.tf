@@ -49,11 +49,12 @@ module "vpc" {
   environment    = var.environment
   vpc_cidr_block = var.vpc_cidr_block
 
-  enable_s3_endpoint       = var.enable_s3_endpoint
-  enable_dynamodb_endpoint = var.enable_dynamodb_endpoint
+  availability_zones           = var.availability_zones
+  enable_s3_endpoint           = var.enable_s3_endpoint
+  enable_dynamodb_endpoint     = var.enable_dynamodb_endpoint
 
   vpc_flow_logs_retention_days = var.vpc_flow_logs_retention_days
-  common_tags                   = var.common_tags
+  common_tags                  = var.common_tags
 }
 
 # ============================================================================
@@ -68,6 +69,7 @@ module "subnets" {
 
   # Multi-AZ & Dynamic Subnet Configuration
   num_availability_zones     = var.num_availability_zones
+  availability_zones         = var.availability_zones
   num_private_subnets        = var.num_private_subnets
   num_public_subnets         = var.num_public_subnets
   private_subnet_cidr_blocks = var.private_subnet_cidr_blocks

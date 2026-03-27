@@ -49,6 +49,27 @@ variable "num_availability_zones" {
   }
 }
 
+variable "availability_zones" {
+  description = <<EOF
+List of Availability Zone names to use for subnet distribution.
+If not provided, defaults for the region will be used.
+Examples:
+  - For us-east-1: ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d"]
+  - For eu-west-1: ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+  - For ap-southeast-1: ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
+
+If not specified, common AZ patterns will be used based on region.
+To avoid requiring ec2:DescribeAvailabilityZones permission, explicitly provide this list.
+EOF
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(var.availability_zones) == 0 || length(var.availability_zones) >= 1 && length(var.availability_zones) <= 4
+    error_message = "Please provide 1 to 4 availability zones, or leave empty for defaults."
+  }
+}
+
 variable "num_private_subnets" {
   description = "Number of private subnets to create (one per availability zone)"
   type        = number

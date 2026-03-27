@@ -21,6 +21,11 @@ vpc_flow_logs_retention_days  = 30
 # Number of Availability Zones to use (1-4)
 num_availability_zones = 2
 
+# Specific Availability Zones to use (empty list will use regional defaults)
+# Set this to explicitly control which AZs are used
+# This avoids requiring the ec2:DescribeAvailabilityZones IAM permission
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
 # Number of private subnets to create
 num_private_subnets = 2
 

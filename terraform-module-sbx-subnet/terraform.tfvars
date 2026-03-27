@@ -6,6 +6,10 @@
 aws_region             = "us-east-1"
 environment            = "Sandbox"
 
+# Availability Zones (explicitly specified to avoid requiring ec2:DescribeAvailabilityZones IAM permission)
+# Specify the AZs to use; leave empty to use region defaults
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
 # Multi-AZ Configuration
 num_availability_zones = 2
 num_private_subnets    = 2

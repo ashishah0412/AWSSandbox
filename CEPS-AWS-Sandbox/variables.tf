@@ -57,6 +57,17 @@ variable "num_availability_zones" {
   }
 }
 
+variable "availability_zones" {
+  description = <<EOF
+List of specific Availability Zones to use. If empty (default), will use regional defaults.
+This is useful when you want explicit control over which AZs to use and to avoid requiring
+the ec2:DescribeAvailabilityZones IAM permission (useful in federated accounts with restricted permissions).
+Example: ["us-east-1a", "us-east-1b", "us-east-1c"]
+EOF
+  type        = list(string)
+  default     = []
+}
+
 variable "num_private_subnets" {
   description = "Number of private subnets to create (one per AZ)"
   type        = number

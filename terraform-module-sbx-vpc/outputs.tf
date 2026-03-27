@@ -49,7 +49,7 @@ output "flow_log_group_arn" {
 
 output "availability_zones" {
   description = "Available zones in the region"
-  value       = data.aws_availability_zones.available.names
+  value       = local.availability_zones
 }
 
 output "account_id" {
