@@ -290,7 +290,7 @@ resource "aws_lambda_function" "resource_shutdown" {
   function_name    = "${var.environment}-resource-shutdown"
   role             = aws_iam_role.lambda_shutdown_role[0].arn
   handler          = "lambda_handler.handler"
-  source_code_hash = filebase64sha256("${path.module}/lambda_handler.zip") # File will be created during Terraform apply
+  source_code_hash = try(filebase64sha256("${path.module}/lambda_handler.zip"), "placeholder-hash")
   timeout          = 60
   runtime          = "python3.11"
 
