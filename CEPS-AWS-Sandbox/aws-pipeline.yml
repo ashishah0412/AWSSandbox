@@ -1,0 +1,238 @@
+parameters:
+  - name: RUN_DESTROY
+    displayName: 'Run Destroy Stage?'
+    type: boolean
+    default: false
+
+trigger: none
+#trigger:
+#  branches:
+#    include:
+#      - main
+pr:
+  branches:
+    include:
+       - main
+ 
+pool: mdp-eu2pi1-std-linux-01   # ADO managed agent pool
+ 
+variables:
+  aws.rolecredential.maxduration: "3600" # Can be set from 900 - 43200s
+  awsRegion: 'us-east-1'
+  # Fallback Terraform version if detection fails or constraint is complex
+  defaultTerraformVersion: '1.5.7'
+ 
+steps:
+  # 0. Checkout repo
+  - checkout: self
+    clean: true
+ 
+  # 1. Detect Terraform version from stack (aws_sandbox/)
+  #    Reads 'required_version' from any *.tf file and maps it to a concrete version.
+  - script: |
+      set -e
+ 
+      # Configurable bits: stack folder and file name
+      STACK_FOLDER="$(Build.SourcesDirectory)/aws_sandbox"
+      TERRAFORM_VERSION_FILE="terraform.tf"
+ 
+      echo "Reading Terraform version from: ${STACK_FOLDER}/${TERRAFORM_VERSION_FILE}"
+ 
+      if [ ! -f "${STACK_FOLDER}/${TERRAFORM_VERSION_FILE}" ]; then
+        echo "ERROR: Terraform version file not found: ${STACK_FOLDER}/${TERRAFORM_VERSION_FILE}"
+        exit 1
+      fi
+ 
+      # Read the file and find the line containing 'required_version'
+      TF_VERSION_ENTRY=$(grep "required_version" "${STACK_FOLDER}/${TERRAFORM_VERSION_FILE}" || true)
+ 
+      if [ -z "$TF_VERSION_ENTRY" ]; then
+        echo "ERROR: No 'required_version' entry found in ${TERRAFORM_VERSION_FILE}"
+        exit 1
+      fi
+ 
+      echo "Found required_version line:"
+      echo "  $TF_VERSION_ENTRY"
+ 
+      # Extract the RHS of 'required_version = ...'
+      # Example line: required_version = "1.3.7"
+      # or:          required_version = ">= 1.3.7"
+      RHS=$(echo "$TF_VERSION_ENTRY" | sed -E 's/.*required_version[[:space:]]*=[[:space:]]*"(.*)".*/\1/')
+ 
+      # If RHS contains an operator (e.g. ">= 1.3.7" or "~> 1.6.0"), strip it and keep the numeric part.
+      # This mimics the PS script's expectation that the stored value is just a version string.
+      TF_VERSION_NUM_ENTRY=$(echo "$RHS" | awk '{print $NF}')
+ 
+      echo "Parsed version constraint value: '$RHS'"
+      echo "Using numeric portion for version: '$TF_VERSION_NUM_ENTRY'"
+ 
+      # Split into major/minor/revision components, and normalize as integers to drop leading zeros
+      IFS='.' read -r MAJOR MINOR PATCH <<< "$TF_VERSION_NUM_ENTRY"
+ 
+      if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
+        echo "ERROR: Could not parse version into major.minor.patch from '$TF_VERSION_NUM_ENTRY'"
+        exit 1
+      fi
+ 
+      # Convert to integers (this strips leading zeros conceptually, like the PowerShell script)
+      MAJOR=$((10#$MAJOR))
+      MINOR=$((10#$MINOR))
+      PATCH=$((10#$PATCH))
+ 
+      TF_VERSION_NUMBER="${MAJOR}.${MINOR}.${PATCH}"
+ 
+      echo "Found Version: ${TF_VERSION_NUMBER}"
+ 
+      # Set ADO pipeline variable (similar to $azPipelineOutputs behavior)
+      echo "##vso[task.setvariable variable=terraformVersion]${TF_VERSION_NUMBER}"
+  
+    displayName: "Detect Terraform version from stack"
+ 
+  # 2. Install Terraform using TerraformInstaller
+  - task: TerraformInstaller@1
+    displayName: "Install Terraform $(terraformVersion)"
+    inputs:
+      terraformVersion: '$(terraformVersion)'
+ 
+  # 3. Federate into HUB account via OIDC (AonSandboxBuildAgentController in HUB)
+  - task: AWSShellScript@1
+    displayName: "Federate into HUB (OIDC)"
+    inputs:
+      awsCredentials: 'aws-oidc-sandbox-federation'   # Service connection bound to hub role
+      regionName: '$(awsRegion)'
+      scriptType: 'inline'
+      inlineScript: |
+        echo "Caller identity in HUB (OIDC):"
+        aws sts get-caller-identity
+ 
+        # Expose HUB credentials for Terraform tasks
+        echo "##vso[task.setvariable variable=AWS_ACCESS_KEY_ID;issecret=true]$AWS_ACCESS_KEY_ID"
+        echo "##vso[task.setvariable variable=AWS_SECRET_ACCESS_KEY;issecret=true]$AWS_SECRET_ACCESS_KEY"
+        echo "##vso[task.setvariable variable=AWS_SESSION_TOKEN;issecret=true]$AWS_SESSION_TOKEN"         
+ 
+  # 4. Terraform init (hub state bucket)
+  #    backend.config should point to the hub account S3 bucket (and DynamoDB if used).
+  - task: TerraformCLI@2
+    displayName: "Terraform init (hub state bucket)"
+    inputs:
+      command: 'init'
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+      commandOptions: '-backend-config=$(Build.SourcesDirectory)/aws_sandbox/backend.config'
+      backendType: 'aws'
+      allowTelemetryCollection: true
+      backendServiceAws: 'aws-oidc-sandbox-federation'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)   
+ 
+  # 5. Terraform validate
+  - task: TerraformCLI@2
+    displayName: "Terraform validate"
+    inputs:
+      command: 'validate'
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)
+ 
+  # 6. Terraform plan
+  - task: TerraformCLI@2
+    displayName: "Terraform plan" 
+    inputs: 
+      command: 'plan'     
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)
+     
+  
+  # 7.Terraform approval
+  #- stage: Approval
+   # dependsOn: Plan
+    #jobs:
+    #- job: waitForApproval
+    #  pool: server
+    #  timeoutInMinutes: 1440
+    #  steps:
+    #  - task: ManualValidation@0
+    #  inputs:
+    #    instructions: 'Approve Terraform apply to Sandbox'
+    #    onTimeout: 'reject'
+ 
+  # 8. Terraform apply
+  - task: TerraformCLI@2
+    displayName: "Terraform apply"
+    inputs:
+      command: 'apply'
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+      commandOptions: '-auto-approve'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)
+
+  # =========================================================================
+  # 9. DESTROY STEPS (Manual - Conditional)
+  # =========================================================================
+  # Only runs if RUN_DESTROY parameter is set to true at queue time
+  
+  # 9a. Destroy Approval Check
+  - script: |
+      echo "========================================="
+      echo "⚠️  DESTROY PARAMETER DETECTED"
+      echo "========================================="
+      echo ""
+      echo "CAUTION: This pipeline will DESTROY all created infrastructure by this pipeline earlier!"
+      echo ""      
+      echo "This action CANNOT be undone!"
+      echo ""
+      echo "========================================="
+    displayName: "⚠️ DESTROY WARNING"
+    condition: and(succeeded(), eq('${{ parameters.RUN_DESTROY }}', true))
+
+  # 9b. Terraform plan -destroy (preview)
+  - task: TerraformCLI@2
+    displayName: "Terraform plan -destroy (Preview)"
+    inputs:
+      command: 'plan'
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+      commandOptions: '-destroy'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)
+    condition: and(succeeded(), eq('${{ parameters.RUN_DESTROY }}', true))
+
+  # 9c. Terraform destroy execution
+  - task: TerraformCLI@2
+    displayName: "Terraform destroy (EXECUTION)"
+    inputs:
+      command: 'destroy'
+      workingDirectory: '$(Build.SourcesDirectory)/aws_sandbox/'
+      commandOptions: '-auto-approve'
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN)
+      AWS_DEFAULT_REGION: $(awsRegion)
+    condition: and(succeeded(), eq('${{ parameters.RUN_DESTROY }}', true))
+
+  # 9d. Destroy completion summary
+  - script: |
+      echo "========================================="
+      echo "✓ INFRASTRUCTURE DESTROYED"
+      echo "========================================="
+      echo ""     
+      echo ""
+      echo "To redeploy, run pipeline with RUN_DESTROY=false"
+      echo "========================================="
+    displayName: "✓ Destroy Complete Summary"
+    condition: and(succeeded(), eq('${{ parameters.RUN_DESTROY }}', true))
