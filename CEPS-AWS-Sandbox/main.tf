@@ -103,6 +103,22 @@ resource "aws_route" "public_internet_route" {
   gateway_id             = aws_internet_gateway.main.id
 }
 
+# ============================================================================
+# Firewall Subnet Route - Internet Gateway (CRITICAL for return traffic)
+# ============================================================================
+# The firewall endpoint receives traffic from private subnets (0.0.0.0/0 -> firewall)
+# and needs a route to forward allowed traffic to the IGW for internet access
+# ============================================================================
+resource "aws_route" "firewall_internet_route" {
+  route_table_id         = module.subnets.firewall_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.main.id
+
+  depends_on = [
+    aws_internet_gateway.main
+  ]
+}
+
 # Helper module-like setup for route tables mentioned in subnets (this is simple local resource)
 locals {
   subnets_routing = {
@@ -157,26 +173,29 @@ module "rbac" {
 # ============================================================================
 # Module 6: Network Firewall
 # ============================================================================
-# module "firewall" {
-#   source = "../terraform-module-sbx-firewall"
+module "firewall" {
+  source = "../terraform-module-sbx-firewall"
 
-#   aws_region        = var.aws_region
-#   environment       = var.environment
-#   vpc_id            = module.vpc.vpc_id
-#   firewall_subnet_id = module.subnets.firewall_subnet_id
-#   vpc_cidr_block    = var.vpc_cidr_block
+  aws_region        = var.aws_region
+  environment       = var.environment
+  vpc_id            = module.vpc.vpc_id
+  firewall_subnet_id = module.subnets.firewall_subnet_id
+  vpc_cidr_block    = var.vpc_cidr_block
 
-#   firewall_logs_retention_days = var.firewall_logs_retention_days
-#   enable_s3_logging            = var.firewall_enable_s3_logging
-#   enable_firewall_alerts       = var.firewall_enable_alerts
-#   sns_topic_arn                = module.automation.sns_topic_arn
+  private_route_table_ids = module.subnets.private_route_table_ids
+  public_route_table_ids  = module.subnets.public_route_table_ids
 
-#   stateless_rule_group_capacity = var.stateless_rule_group_capacity
-#   stateful_rule_group_capacity  = var.stateful_rule_group_capacity
-#   blocked_domains               = var.blocked_domains
+  firewall_logs_retention_days = var.firewall_logs_retention_days
+  enable_s3_logging            = var.firewall_enable_s3_logging
+  enable_firewall_alerts       = var.firewall_enable_alerts
+  sns_topic_arn                = module.automation.sns_topic_arn
 
-#   common_tags = var.common_tags
-# }
+  stateless_rule_group_capacity = var.stateless_rule_group_capacity
+  stateful_rule_group_capacity  = var.stateful_rule_group_capacity
+  blocked_domains               = var.blocked_domains
+
+  common_tags = var.common_tags
+}
 
 # ============================================================================
 # Module 7: Cost Budget & Automation
