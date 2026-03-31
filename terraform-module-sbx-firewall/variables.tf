@@ -44,6 +44,18 @@ variable "firewall_subnet_id" {
   }
 }
 
+variable "private_route_table_ids" {
+  description = "List of private subnet route table IDs to add firewall routes to"
+  type        = list(string)
+  default     = []
+}
+
+variable "public_route_table_ids" {
+  description = "List of public subnet route table IDs to add firewall routes to"
+  type        = list(string)
+  default     = []
+}
+
 variable "vpc_cidr_block" {
   description = "VPC CIDR block"
   type        = string

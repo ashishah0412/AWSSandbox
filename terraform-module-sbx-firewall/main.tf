@@ -238,6 +238,10 @@ resource "aws_networkfirewall_rule_group" "stateful_rulesource" {
           keyword  = "msg"
           settings = ["\"Suspicious traffic\""]
         }
+        rule_option {
+          keyword  = "sid"
+          settings = ["100001"]
+        }
       }
 
       stateful_rule {
@@ -257,6 +261,10 @@ resource "aws_networkfirewall_rule_group" "stateful_rulesource" {
         rule_option {
           keyword  = "msg"
           settings = ["\"Allow established VPC traffic\""]
+        }
+        rule_option {
+          keyword  = "sid"
+          settings = ["100002"]
         }
       }
     }
@@ -281,7 +289,7 @@ resource "aws_networkfirewall_firewall_policy" "policy" {
   name               = "${var.environment}-firewall-policy"
   description        = "Firewall policy for ${var.environment} sandbox environment"
   firewall_policy    {
-    stateful_default_actions   = ["aws:alert_established", "aws:drop"]
+    stateful_default_actions   = ["aws:alert_established", "aws:drop_established"]
     stateless_default_actions  = ["aws:pass"]
     stateless_fragment_default_actions = ["aws:pass"]
 
@@ -332,10 +340,16 @@ resource "aws_networkfirewall_firewall" "firewall" {
   ]
 }
 
+# Extract firewall endpoint ID from firewall status
+locals {
+  firewall_sync_states = try(aws_networkfirewall_firewall.firewall.firewall_status[0].sync_states, [])
+  firewall_endpoint_id = try(
+    [for state in local.firewall_sync_states : state.attachment[0].endpoint_id][0],
+    null
+  )
+}
 
-# ============================================================================
-# EventBridge Rule for Firewall Alerts (Optional)  
-# ============================================================================
+
 resource "aws_cloudwatch_event_rule" "firewall_alerts" {
   count           = var.enable_firewall_alerts ? 1 : 0
   name            = "${var.environment}-firewall-alerts"
@@ -408,4 +422,25 @@ resource "aws_iam_role_policy" "eventbridge_firewall_policy" {
       }
     ]
   })
+}
+
+
+# ============================================================================
+# Routes to Firewall Endpoints from Private Subnets (North-South Traffic)
+# ============================================================================
+# NOTE: Only 0.0.0.0/0 routes are created. AWS automatically creates local 
+# routes for VPC CIDR (10.10.0.0/16 → local), which take priority over any
+# additional routes with the same destination. For East-West traffic inspection,
+# a more complex architecture (Transit Gateway) would be required.
+# ============================================================================
+resource "aws_route" "private_to_firewall_default" {
+  for_each = toset(var.private_route_table_ids)
+
+  route_table_id         = each.value
+  destination_cidr_block = "0.0.0.0/0"
+  vpc_endpoint_id        = local.firewall_endpoint_id
+
+  depends_on = [
+    aws_networkfirewall_firewall.firewall
+  ]
 }

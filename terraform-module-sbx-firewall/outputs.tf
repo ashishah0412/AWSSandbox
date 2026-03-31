@@ -69,3 +69,8 @@ output "firewall_endpoints" {
     firewall_details = aws_networkfirewall_firewall.firewall.firewall_status
   }
 }
+
+output "firewall_endpoint_id" {
+  description = "Network Firewall endpoint ID (for route tables)"
+  value       = local.firewall_endpoint_id
+}
