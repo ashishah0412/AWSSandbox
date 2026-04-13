@@ -434,7 +434,7 @@ resource "aws_iam_role_policy" "eventbridge_firewall_policy" {
 # a more complex architecture (Transit Gateway) would be required.
 # ============================================================================
 resource "aws_route" "private_to_firewall_default" {
-  for_each = toset(var.private_route_table_ids)
+  for_each = { for i, rt_id in var.private_route_table_ids : tostring(i) => rt_id }
 
   route_table_id         = each.value
   destination_cidr_block = "0.0.0.0/0"
